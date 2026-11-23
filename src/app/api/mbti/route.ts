@@ -47,22 +47,33 @@ const SYSTEM_PROMPT = `你是一位資深的 MBTI 性格分析師。
 
 分析時請考慮四個維度：
 - E/I（外向／內向）： 從哪裡獲得能量、社交需求
-- S/N（實感／直覺): 关注具體事實還是抽象概念、重視實務還是可能性
-- T/F（思考／情感): 做決定時依據邏輯還是價值觀與他人感受
-- J/P（判斷／感知): 喜歡計畫與秩序，還是保持彈性隨機應變
+- S/N（實感／直覺)： 關注具體事實還是抽象概念、重視實務還是可能性
+- T/F（思考／情感)： 做決定時依據邏輯還是價值觀與他人感受
+- J/P（判斷／感知)： 喜歡計畫與秩序，還是保持彈性隨機應變
 
-輸出規則：
+輸出格式（非常重要，欄位名必須完全照抄）：
+只輸出一個 JSON 物件，不要有任何其他文字、說明或 Markdown 程式碼區塊。欄位如下：
+
+{
+  "mbti": "四個字母的 MBTI 類型，必須是 INTJ, INTP, ENTJ, ENTP, INFJ, INFP, ENFJ, ENFP, ISTJ, ISFJ, ESTJ, ESFJ, ISTP, ISFP, ESTP, ESFP 其中之一",
+  "nickname": "簡短的中文暱稱，不要出現在 MBTI 類型名稱本身",
+  "summary": "用 2-3 句話描述這個個性特徵與行為模式",
+  "traits": ["特質形容詞1", "特質形容詞2", "特質形容詞3"],
+  "emoji": "一個最能代表這個類型的 emoji"
+}
+
+其它規則：
 - 所有文字使用繁體中文
-- nickname 是簡短的中文暱稱，不要出現在 MBTI 類型名稱本身
-- summary 用 2-3 句話描述這個個性特徵與行為模式
 - traits 給 3 到 5 個特質形容詞
-- emoji 給一個最能代表這個類型的 emoji
-- 只輸出 JSON，不要輸出任何其他文字`;
+- "mbti" 這個欄位名必須寫成小寫的 mbti，不要寫成 MBTI 或其它名字`;
 
 // ─────────────────────────────────────────────────────────────
 // 結構化輸出的 JSON Schema
 // ─────────────────────────────────────────────────────────────
-// 交給 output_config.format，模型就會嚴格照這個 schema 回傳。
+// 交給 output_config.format。
+// 注意：MiniMax 的 Anthropic 相容端點目前「接受但不完全強制」這個 schema
+// （回 200，卻可能回傳 schema 外的欄位），所以真正的保險是上面 prompt 裡
+// 明寫的欄位格式，加上下面 parseMbti() 的容錯解析。
 const MBTI_SCHEMA = {
   type: "object",
   properties: {
@@ -108,6 +119,45 @@ function extractJson(text: string): unknown {
 // ─────────────────────────────────────────────────────────────
 // 檢查並整理模型回來的資料
 // ─────────────────────────────────────────────────────────────
+// 模型有時會自己改欄位名（實測曾回 "MBTI" 而不是 "mbti"，
+// 也會用中文欄位名），所以每個欄位都準備幾個常見別名。
+const FIELD_ALIASES = {
+  mbti: ["mbti", "MBTI", "type", "mbtiType", "類型", "性格類型"],
+  nickname: ["nickname", "name", "title", "暱稱", "綽號"],
+  summary: ["summary", "analysis", "description", "personality", "分析", "描述"],
+  traits: ["traits", "keywords", "tags", "features", "特質", "特點"],
+  emoji: ["emoji", "icon", "symbol", "符號"],
+} as const;
+
+// 依序嘗試別名，取第一個有值的欄位。
+function pick(
+  obj: Record<string, unknown>,
+  keys: readonly string[]
+): unknown {
+  for (const key of keys) {
+    const value = obj[key];
+    if (value !== undefined && value !== null) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+// 從任意文字裡找出有效的 MBTI 類型。
+// 例如 "ISTJ"、"MBTI 類型：ISTJ（守護者）" 都能抓出來。
+// 會掃過所有 4 字母片段，所以像 "MBTI" 這種無效值會被略過。
+function normalizeMbti(value: unknown): MbtiType | null {
+  const text = String(value ?? "").toUpperCase();
+
+  for (const match of text.matchAll(/\b[A-Z]{4}\b/g)) {
+    const candidate = match[0] as MbtiType;
+    if (MBTI_TYPES.includes(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function parseMbti(raw: unknown): {
   mbti: MbtiType;
   nickname: string;
@@ -121,20 +171,31 @@ function parseMbti(raw: unknown): {
 
   const obj = raw as Record<string, unknown>;
 
-  // mbti 必須剛好是 16 種之一（去掉空白、轉大寫後比對）。
-  const mbti = String(obj.mbti ?? "").trim().toUpperCase() as MbtiType;
-  if (!MBTI_TYPES.includes(mbti)) {
-    throw new Error(`模型回傳了無效的 MBTI 類型：${obj.mbti}`);
+  // mbti 必須是 16 種之一。模型寫 "ISTJ"、"MBTI: ISTJ" 都能解析。
+  const mbti = normalizeMbti(pick(obj, FIELD_ALIASES.mbti));
+  if (!mbti) {
+    throw new Error(
+      `模型回傳的資料裡找不到 MBTI 類型（收到的欄位：${Object.keys(obj).join(", ") || "無"}）`
+    );
   }
 
-  return {
-    mbti,
-    nickname: String(obj.nickname ?? ""),
-    summary: String(obj.summary ?? ""),
-    // 確保 traits 一定是字串陣列。
-    traits: Array.isArray(obj.traits) ? obj.traits.map((t) => String(t)) : [],
-    emoji: String(obj.emoji ?? ""),
-  };
+  // nickname / summary / emoji 都當成文字處理。
+  const nickname = String(pick(obj, FIELD_ALIASES.nickname) ?? "");
+  const summary = String(pick(obj, FIELD_ALIASES.summary) ?? "");
+  const emoji = String(pick(obj, FIELD_ALIASES.emoji) ?? "");
+
+  // traits 可能是字串陣列，也可能是用逗號分隔的字串，兩種都收。
+  const rawTraits = pick(obj, FIELD_ALIASES.traits);
+  const traits = Array.isArray(rawTraits)
+    ? rawTraits.map((t) => String(t)).filter(Boolean)
+    : typeof rawTraits === "string"
+      ? rawTraits
+          .split(/[,，、]/)
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+
+  return { mbti, nickname, summary, traits, emoji };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -147,7 +208,12 @@ export async function POST(request: Request) {
   const apiKey = process.env.MINIMAX_API_KEY;
   if (!apiKey) {
     return Response.json(
-      { ok: false, error: "伺服器尚未設定 MINIMAX_API_KEY" },
+      {
+        ok: false,
+        error:
+          "伺服器尚未設定 MINIMAX_API_KEY。請確認專案根目錄的 .env.local 有這一行，" +
+          "並重啟 dev server（改 .env.local 後必須重啟才會生效）。",
+      },
       { status: 500 }
     );
   }
