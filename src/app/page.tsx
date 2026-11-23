@@ -23,6 +23,15 @@ export default function Home() {
           >
             MBTI 性格測驗 →
           </Link>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/pdf"
+              className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              PDF 閱讀器 →
+            </Link>
+          </div>
         </div>
 
         <div className="flex w-full flex-wrap items-center justify-center gap-8">

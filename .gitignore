@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# pdf.js worker (由 scripts/copy-pdf-worker.mjs 從 node_modules 複製，npm install 後自動產生)
+public/pdf.worker.min.mjs
+
 # vercel
 .vercel
 

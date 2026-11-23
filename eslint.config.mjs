@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // public/ 底下放的是靜態資源，不是我們的程式碼：
+    // "public/pdf.worker.min.mjs" 是從 node_modules/pdfjs-dist 複製過來的
+    // 壓縮檔，掃它只會產生上千個無意義的警告。
+    "public/**",
   ]),
 ]);
 
