@@ -1,4 +1,7 @@
 import HelloCounter from "./HelloCounter";
+import LotteryButton from "./LotteryButton";
+import OnlineUsers from "./OnlineUsers";
+import PrimeChecker from "./PrimeChecker";
 
 export default function Home() {
   return (
@@ -14,7 +17,12 @@ export default function Home() {
           </p>
         </div>
 
-        <HelloCounter />
+        <div className="flex w-full flex-wrap items-center justify-center gap-8">
+          <HelloCounter />
+          <LotteryButton />
+          <PrimeChecker />
+          <OnlineUsers />
+        </div>
       </main>
     </div>
   );
