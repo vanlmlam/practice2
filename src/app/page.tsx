@@ -1,3 +1,4 @@
+import Link from "next/link";
 import HelloCounter from "./HelloCounter";
 import LotteryButton from "./LotteryButton";
 import OnlineUsers from "./OnlineUsers";
@@ -15,6 +16,13 @@ export default function Home() {
             按一下按鈕就會呼叫 <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">/api/hello</code>，
             每次呼叫都會讓計數器加一。
           </p>
+
+          <Link
+            href="/mbti"
+            className="mt-5 inline-flex items-center gap-2 rounded-full bg-zinc-900 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            MBTI 性格測驗 →
+          </Link>
         </div>
 
         <div className="flex w-full flex-wrap items-center justify-center gap-8">
